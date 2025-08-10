@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>مركز عمليات الدفاع الاستباقي</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --primary-color: #4f46e5;
+      }
+      body {
+        font-family: "Tajawal", sans-serif;
+        background-color: #f1f5f9;
+      }
+      .nav-button {
+        transition: all 0.2s ease-in-out;
+      }
+      .nav-button.active,
+      .nav-button[aria-selected="true"] {
+        background-color: var(--primary-color);
+        color: white;
+      }
+      .tab-content {
+        display: none;
+      }
+      .tab-content.active {
+        display: block;
+      }
+      .radio-label {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.75rem 1rem;
+        border: 2px solid #e2e8f0;
+        border-radius: 0.75rem;
+        cursor: pointer;
+        transition: all 0.2s;
+        background-color: #ffffff;
+      }
+      .radio-label:hover {
+        border-color: #94a3b8;
+      }
+      input[type="radio"]:checked + .radio-label {
+        border-color: var(--primary-color);
+        background-color: #eef2ff;
+      }
+      input[type="radio"]:disabled + .radio-label {
+        cursor: not-allowed;
+        opacity: 0.7;
+      }
+      input[type="radio"]:checked + .radio-label .radio-check {
+        opacity: 1;
+        transform: scale(1);
+      }
+      input[type="radio"] {
+        position: absolute;
+        opacity: 0;
+      }
+      .radio-check {
+        opacity: 0;
+        transform: scale(0.7);
+        transition: all 0.2s;
+      }
+      .chart-container {
+        position: relative;
+        width: 100%;
+        height: 300px;
+        max-height: 400px;
+      }
+      .spinner {
+        border: 4px solid rgba(0, 0, 0, 0.1);
+        border-left-color: var(--primary-color);
+        border-radius: 50%;
+        width: 32px;
+        height: 32px;
+        animation: spin 1s linear infinite;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      .overlay {
+        position: fixed;
+        inset: 0;
+        background-color: rgba(0, 0, 0, 0.5);
+        z-index: 999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 1rem;
+      }
+      .hidden {
+        display: none;
+      }
+      #toast-container {
+        position: fixed;
+        top: 1.5rem;
+        left: 1.5rem;
+        z-index: 1050; /* Higher than modals */
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+      }
+      .toast {
+        display: flex;
+        align-items: center;
+        padding: 0.75rem 1.25rem;
+        border-radius: 0.5rem;
+        color: white;
+        box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1),
+          0 2px 4px -2px rgb(0 0 0 / 0.1);
+        opacity: 0;
+        transform: translateY(20px);
+        animation: toast-in 0.5s forwards;
+      }
+      .toast.success { background-color: #22c55e; }
+      .toast.error { background-color: #ef4444; }
+      .toast.info { background-color: #3b82f6; }
+      @keyframes toast-in { to { opacity: 1; transform: translateY(0); } }
+      .modal-content {
+        transform: scale(0.95);
+        opacity: 0;
+        transition: all 0.2s ease-in-out;
+      }
+      .overlay.active .modal-content {
+        transform: scale(1);
+        opacity: 1;
+      }
+      .progress-bar { background-color: var(--primary-color); }
+    </style>
+  </head>
+  <body class="text-slate-800">
+    <!-- Overlays -->
+    <div id="loading-overlay" class="overlay"><div class="spinner"></div></div>
+    <div id="toast-container" aria-live="assertive"></div>
+    <div id="confirmation-modal" class="overlay hidden">
+      <div class="modal-content bg-white w-full max-w-md p-6 rounded-xl shadow-lg" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+        <h3 id="modal-title" class="text-xl font-bold mb-2"></h3>
+        <p id="modal-body" class="text-slate-600 mb-6"></p>
+        <div id="modal-input-container" class="mb-4 hidden">
+          <label for="modal-input" id="modal-input-label" class="block text-sm font-bold mb-1 text-right"></label>
+          <textarea id="modal-input" class="w-full p-2 border rounded-md" rows="3"></textarea>
+        </div>
+        <div class="flex justify-center gap-4">
+          <button id="modal-confirm-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded-lg"></button>
+          <button id="modal-cancel-btn" class="bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold py-2 px-6 rounded-lg">إلغاء</button>
+        </div>
+      </div>
+    </div>
+    
+    <div id="review-details-modal" class="overlay hidden">
+      <div class="modal-content bg-white w-full max-w-2xl p-6 rounded-xl shadow-lg">
+        <div class="flex justify-between items-center mb-4">
+            <h3 id="review-details-title" class="text-2xl font-bold">تفاصيل الترشيح</h3>
+            <button id="review-details-close-btn" class="text-slate-500 hover:text-slate-800 text-3xl">&times;</button>
+        </div>
+        <div class="max-h-[70vh] overflow-y-auto pr-2">
+            <div class="mb-6">
+                <h4 class="text-lg font-bold mb-2 border-b pb-2">ملاحظات المرشِّح</h4>
+                <p id="details-notes" class="text-slate-700 bg-slate-50 p-3 rounded-md whitespace-pre-wrap"></p>
+            </div>
+            <div>
+                <h4 class="text-lg font-bold mb-2 border-b pb-2">خيارات الحاسبة</h4>
+                <div id="details-scorer-container" class="space-y-4"></div>
+            </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="login-modal" class="overlay active">
+        <div class="modal-content bg-white w-full max-w-sm p-8 rounded-xl shadow-lg text-center">
+            <h3 class="text-2xl font-bold mb-6">اختر المستخدم</h3>
+            <div class="space-y-4">
+                <button data-user="إبراهيم" class="login-btn w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-lg py-4 px-6 rounded-lg">إبراهيم</button>
+                <button data-user="عبد العالي" class="login-btn w-full bg-sky-600 hover:bg-sky-700 text-white font-bold text-lg py-4 px-6 rounded-lg">عبد العالي</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="app-container" class="hidden">
+      <div class="flex flex-col md:flex-row min-h-screen">
+        <!-- Sidebar -->
+        <nav class="bg-slate-800 text-white w-full md:w-64 p-4 md:p-6 flex-shrink-0 flex flex-col">
+          <div>
+            <h1 class="text-2xl font-bold mb-2 text-center">مركز العمليات</h1>
+            <p class="text-center text-slate-300 mb-6">مرحباً, <span id="current-user-name" class="font-bold"></span></p>
+          </div>
+
+          <ul class="space-y-2" id="main-nav" role="tablist">
+            <li><button data-target="dashboard" class="nav-button w-full text-right p-3 rounded-lg hover:bg-slate-700" role="tab">📊 لوحة التحكم</button></li>
+            <li><button data-target="prospecting" class="nav-button w-full text-right p-3 rounded-lg hover:bg-slate-700" role="tab">🎯 التنقيب والتحليل</button></li>
+            <li><button data-target="reviews" class="nav-button w-full text-right p-3 rounded-lg hover:bg-slate-700 relative" role="tab">
+              ⚖️ المراجعات 
+              <span id="review-badge" class="absolute top-1 left-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center hidden">0</span>
+            </button></li>
+            <li id="deployment-nav-item"><button data-target="deployment" class="nav-button w-full text-right p-3 rounded-lg hover:bg-slate-700" role="tab">🚀 النشر والعمليات</button></li>
+            <li><button data-target="crm" class="nav-button w-full text-right p-3 rounded-lg hover:bg-slate-700" role="tab">👥 إدارة العملاء</button></li>
+            <li><button data-target="database" class="nav-button w-full text-right p-3 rounded-lg hover:bg-slate-700" role="tab">🗃️ قواعد البيانات</button></li>
+          </ul>
+
+          <div class="mt-auto pt-8 border-t border-slate-700 space-y-2">
+            <h2 class="text-sm font-bold uppercase text-slate-400">الإعدادات</h2>
+            <button id="logout-btn" class="w-full text-right p-3 rounded-lg hover:bg-red-600 bg-red-700 text-sm flex items-center gap-2">تسجيل الخروج</button>
+          </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="flex-1 p-4 md:p-8 overflow-y-auto">
+          <!-- All tabs are here, structure unchanged -->
+          <div id="dashboard" class="tab-content" role="tabpanel">
+            <h2 class="text-3xl font-extrabold text-slate-900 mb-6">لوحة التحكم</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <div class="bg-white p-6 rounded-xl shadow-md text-center"><p class="text-slate-500 text-sm font-bold uppercase">فرص محتملة</p><p id="db-prospects-count" class="text-4xl font-bold text-indigo-600">0</p></div>
+                <div class="bg-white p-6 rounded-xl shadow-md text-center"><p class="text-slate-500 text-sm font-bold uppercase">بانتظار المراجعة</p><p id="db-review-count" class="text-4xl font-bold text-orange-500">0</p></div>
+                <div class="bg-white p-6 rounded-xl shadow-md text-center"><p class="text-slate-500 text-sm font-bold uppercase">قيد النشر</p><p id="db-queue-count" class="text-4xl font-bold text-yellow-500">0</p></div>
+                <div class="bg-white p-6 rounded-xl shadow-md text-center"><p class="text-slate-500 text-sm font-bold uppercase">مواقع منشورة</p><p id="db-live-count" class="text-4xl font-bold text-green-500">0</p></div>
+            </div>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="bg-white p-6 rounded-xl shadow-md"><h3 class="text-xl font-bold mb-4">حالة قمع العمليات</h3><div class="chart-container"><canvas id="pipeline-chart"></canvas></div></div>
+                <div class="bg-white p-6 rounded-xl shadow-md"><h3 class="text-xl font-bold mb-4">حالة العملاء المحتملين</h3><div class="chart-container"><canvas id="leads-chart"></canvas></div></div>
+            </div>
+          </div>
+          <div id="prospecting" class="tab-content" role="tabpanel">
+            <h2 class="text-3xl font-extrabold text-slate-900 mb-6">وحدة التنقيب والتحليل</h2>
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div class="lg:col-span-2 bg-white p-6 rounded-xl shadow-md"><h3 class="text-xl font-bold mb-4">حاسبة مؤشر الفرصة</h3><div id="scorer-criteria-container" class="space-y-4"></div></div>
+                <div class="lg:col-span-1 bg-white p-6 rounded-xl shadow-md"><h3 class="text-xl font-bold mb-4">النتيجة والقرار</h3><div class="text-center p-4 bg-indigo-50 rounded-lg mb-4"><p class="text-sm text-indigo-700">النتيجة النهائية:</p><p id="scorer-score" class="text-5xl font-bold text-indigo-600">0</p></div><div id="scorer-verdict" class="text-center mb-6"></div>
+                <form id="add-prospect-form" class="space-y-4 hidden">
+                    <div><label for="brand-name" class="block text-sm font-bold mb-1">اسم العلامة التجارية</label><input type="text" id="brand-name" class="w-full p-2 border rounded-md" required /></div>
+                    <div><label for="brand-origin" class="block text-sm font-bold mb-1">أصل العلامة التجارية</label><select id="brand-origin" class="w-full p-2 border rounded-md"><option value="أمريكية">أمريكية</option><option value="صينية">صينية</option><option value="أخرى">أخرى</option></select></div>
+                    <div><label for="brand-domain" class="block text-sm font-bold mb-1">النطاق المقترح</label><input type="text" id="brand-domain" class="w-full p-2 border rounded-md" required /><p id="domain-error" class="text-red-500 text-xs mt-1 hidden"></p></div>
+                    <div><label for="prospect-notes" class="block text-sm font-bold mb-1">ملاحظات (اختياري)</label><textarea id="prospect-notes" class="w-full p-2 border rounded-md" rows="3"></textarea></div>
+                    <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg transition">إضافة إلى قائمة الفرص</button>
+                </form></div>
+            </div>
+            <div class="mt-8 bg-white p-6 rounded-xl shadow-md"><h3 class="text-xl font-bold mb-4">قاعدة بيانات الفرص المحتملة</h3><div class="overflow-x-auto"><table class="w-full text-sm text-left"><thead class="text-xs text-slate-700 uppercase bg-slate-100"><tr><th class="px-4 py-3">اسم العلامة</th><th class="px-4 py-3">النتيجة</th><th class="px-4 py-3">النطاق</th><th class="px-4 py-3">تاريخ الإدخال</th><th class="px-4 py-3">إجراء</th></tr></thead><tbody id="prospects-table-body"></tbody></table></div><div id="prospects-empty-state" class="text-center py-10 text-slate-500 hidden"><p class="mb-4">لم تقم بإضافة أي فرص بعد.</p><button onclick="document.getElementById('brand-name').focus()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg">أضف أول فرصة</button></div></div>
+          </div>
+          <div id="reviews" class="tab-content" role="tabpanel">
+            <h2 class="text-3xl font-extrabold text-slate-900 mb-6">مراجعة الترشيحات</h2>
+            <div id="reviews-container" class="space-y-4"></div>
+            <div id="reviews-empty-state" class="text-center py-10 text-slate-500 hidden"><p>لا توجد ترشيحات بانتظار مراجعتك حاليًا.</p></div>
+          </div>
+          <div id="deployment" class="tab-content" role="tabpanel">
+            <h2 class="text-3xl font-extrabold text-slate-900 mb-6">وحدة النشر والعمليات</h2>
+            <div class="bg-white p-6 rounded-xl shadow-md">
+                <div id="deployment-list-container"></div>
+                <div id="deployment-checklist-container" class="hidden">
+                    <button id="back-to-deployment-list-btn" class="mb-4 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold py-2 px-4 rounded-lg">&larr; العودة إلى القائمة</button>
+                    <div id="deployment-info" class="p-4 bg-slate-100 rounded-lg mb-6 border-l-4 border-indigo-500"></div>
+                    <h3 class="text-xl font-bold mb-4">قائمة مهام النشر لـ <span id="checklist-brand-name" class="text-indigo-600"></span></h3>
+                    <div class="mb-4"><div class="bg-slate-200 h-2.5 w-full rounded-full"><div id="deployment-progress-bar" class="progress-bar h-2.5 rounded-full" style="width: 0%"></div></div></div>
+                    <div id="checklist" class="space-y-3"></div>
+                    <button id="complete-deployment-btn" class="mt-6 bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded-lg transition hidden">إكمال النشر ونقل العلامة</button>
+                </div>
+                <div id="deployment-placeholder" class="text-center py-10 text-slate-500 hidden"><p>لا توجد علامات تجارية في قائمة انتظار النشر حاليًا.</p></div>
+            </div>
+          </div>
+          <div id="crm" class="tab-content" role="tabpanel">
+            <h2 class="text-3xl font-extrabold text-slate-900 mb-6">وحدة إدارة العملاء (CRM)</h2>
+            <div class="bg-white p-6 rounded-xl shadow-md"><div class="mb-6"><label for="crm-select" class="block text-sm font-bold mb-2">اختر علامة تجارية منشورة:</label><select id="crm-select" class="w-full md:w-1/2 p-2 border rounded-md"></select></div><div id="crm-container" class="hidden grid grid-cols-1 lg:grid-cols-2 gap-8"><div><h3 class="text-xl font-bold mb-4">إضافة عميل محتمل جديد</h3><form id="add-lead-form" class="space-y-4"><div><label for="lead-name" class="block text-sm font-bold">اسم العميل/الشركة</label><input type="text" id="lead-name" class="w-full p-2 border rounded-md" required /></div><button type="submit" class="w-full bg-sky-600 hover:bg-sky-700 text-white font-bold py-2 px-4 rounded-lg">إضافة عميل</button></form></div><div><h3 class="text-xl font-bold mb-4">قائمة العملاء لـ <span id="crm-brand-name" class="text-indigo-600"></span></h3><div id="leads-list" class="space-y-2"></div><div id="leads-empty-state" class="text-center py-6 text-slate-400 hidden"><p>لا يوجد عملاء بعد لهذه العلامة.</p></div></div></div><div id="crm-placeholder" class="text-center py-10 text-slate-500"><p>لا توجد مواقع منشورة بعد لإدارة عملائها.</p></div></div>
+          </div>
+          <div id="database" class="tab-content" role="tabpanel">
+            <h2 class="text-3xl font-extrabold text-slate-900 mb-6">قواعد البيانات</h2>
+            <div class="mb-8"><div class="flex justify-between items-center mb-4"><h3 class="text-2xl font-bold">سجل المراجعات والقرارات</h3></div><div class="bg-white rounded-xl shadow-md overflow-x-auto"><table class="w-full text-sm text-left"><thead class="text-xs text-slate-700 uppercase bg-slate-100"><tr><th class="px-4 py-3">العلامة</th><th class="px-4 py-3">المرشِّح</th><th class="px-4 py-3">المراجِع</th><th class="px-4 py-3">الحالة</th><th class="px-4 py-3">سبب الرفض</th></tr></thead><tbody id="db-reviews-table"></tbody></table></div></div>
+            <div class="mb-8"><div class="flex justify-between items-center mb-4"><h3 class="text-2xl font-bold">قاعدة بيانات الفرص والنشر</h3></div><div class="bg-white rounded-xl shadow-md overflow-x-auto"><table class="w-full text-sm text-left"><thead class="text-xs text-slate-700 uppercase bg-slate-100"><tr><th class="px-4 py-3">اسم العلامة</th><th class="px-4 py-3">النتيجة</th><th class="px-4 py-3">النطاق</th><th class="px-4 py-3">الحالة</th></tr></thead><tbody id="db-prospects-table"></tbody></table></div></div>
+            <div><div class="flex justify-between items-center mb-4"><h3 class="text-2xl font-bold">قاعدة بيانات المواقع المنشورة</h3></div><div class="bg-white rounded-xl shadow-md overflow-x-auto"><table class="w-full text-sm text-left"><thead class="text-xs text-slate-700 uppercase bg-slate-100"><tr><th class="px-4 py-3">اسم العلامة</th><th class="px-4 py-3">النطاق</th><th class="px-4 py-3">تاريخ النشر</th><th class="px-4 py-3">عدد العملاء</th></tr></thead><tbody id="db-live-table"></tbody></table></div></div>
+          </div>
+        </main>
+      </div>
+    </div>
+
+    <script>
+      // ======================================================
+      // === Your Firebase Configuration ===
+      // ======================================================
+      const firebaseConfig = {
+        apiKey: "AIzaSyC0ABD3mPOXci0hkxnhuEboTZO4V7o63rI",
+        authDomain: "brand-operations-center.firebaseapp.com",
+        projectId: "brand-operations-center",
+        storageBucket: "brand-operations-center.appspot.com",
+        messagingSenderId: "771386338196",
+        appId: "1:771386338196:web:da8a9993d43be420a33d81"
+      };
+      // ======================================================
+
+      firebase.initializeApp(firebaseConfig);
+      const db = firebase.firestore();
+
+      document.addEventListener("DOMContentLoaded", () => {
+        const app = {
+          state: {
+            currentUser: null,
+            prospects: [],
+            reviewInbox: [],
+            deploymentQueue: [],
+            liveSites: [],
+          },
+          listeners: [], // To detach listeners on logout
+          criteria: [ { name: "sales", q: "أداء المبيعات؟", opts: [{ t: "مبيعات هائلة (+5)", v: 5 }, { t: "مبيعات متوسطة (+1)", v: 1 }] }, { name: "sellers", q: "عدد البائعين؟", opts: [{ t: "بائع واحد فقط (+5)", v: 5 }, { t: "2-4 بائعين (+2)", v: 2 }, { t: "5+ بائعين (0)", v: 0 }] }, { name: "reviews", q: "جودة المراجعات؟", opts: [{ t: "كثيرة وجديدة وإيجابية (+2)", v: 2 }, { t: "قليلة أو قديمة أو سلبية (0)", v: 0 }] }, { name: "presence", q: "الوجود الرقمي الرسمي؟", opts: [ { t: "لا يوجد موقع أو مهمل (+4)", v: 4 }, { t: "موقع بدون صفحة جملة (+2)", v: 2 }, { t: "موقع احترافي كامل (0)", v: 0 } ] }, { name: "geo", q: "الفجوة الجغرافية؟", opts: [{ t: "تبيع في سوق واحد فقط (+3)", v: 3 }, { t: "تبيع عالميًا (0)", v: 0 }] }, { name: "appeal", q: "جاذبية فئة المنتج؟", opts: [{ t: 'فئة "ساخنة" (+1)', v: 1 }, { t: "فئة عادية (0)", v: 0 }] }, ],
+          deploymentChecklistItems: ["شراء النطاق", "إنشاء حساب استضافة", "تثبيت ووردبريس", "استنساخ القالب", "تخصيص الموقع", "تحسين SEO الأساسي"],
+
+          // --- UI Helpers ---
+          showToast(message, type = 'success') { const t = document.getElementById('toast-container'), e = document.createElement('div'); e.className = `toast ${type}`, e.textContent = message, t.appendChild(e), setTimeout(() => e.remove(), 4e3) },
+          showConfirmation(config) { const { title: t, body: e, confirmText: o, onConfirm: n, needsInput: i = !1, inputLabel: s = "" } = config, a = document.getElementById("confirmation-modal"); document.getElementById("modal-title").textContent = t, document.getElementById("modal-body").textContent = e; const d = document.getElementById("modal-confirm-btn"); d.textContent = o; const l = document.getElementById("modal-input-container"), r = document.getElementById("modal-input"); i ? (document.getElementById("modal-input-label").textContent = s, r.value = "", l.classList.remove("hidden")) : l.classList.add("hidden"), a.classList.add("active"), a.classList.remove("hidden"); const c = document.getElementById("modal-cancel-btn"), m = () => { a.classList.remove("active"), a.classList.add("hidden"), d.replaceWith(d.cloneNode(!0)), c.replaceWith(c.cloneNode(!0)) }; document.getElementById("modal-confirm-btn").onclick = () => { const t = i ? r.value.trim() : null; i && !t ? this.showToast("هذا الحقل مطلوب.", "error") : (n(t), m()) }, document.getElementById("modal-cancel-btn").onclick = m },
+          sanitizeHTML(str) { if (!str) return ''; const temp = document.createElement('div'); temp.textContent = str; return temp.innerHTML; },
+          
+          // --- App Initialization ---
+          init() { const savedUser = localStorage.getItem("brandOpsUser_v9"); savedUser ? (this.state.currentUser = savedUser, this.initializeApp()) : (document.getElementById('login-modal').classList.remove('hidden'), this.initLoginScreen()) },
+          initLoginScreen() { document.querySelectorAll('.login-btn').forEach(button => { button.addEventListener('click', (e) => { this.state.currentUser = e.target.dataset.user; localStorage.setItem("brandOpsUser_v9", this.state.currentUser); document.getElementById('login-modal').classList.add('hidden'); this.initializeApp(); }); }); },
+          initializeApp() {
+            document.getElementById('loading-overlay').classList.remove('hidden');
+            document.getElementById('app-container').classList.remove('hidden');
+            document.getElementById('current-user-name').textContent = this.state.currentUser;
+            this.initStaticUI();
+            this.attachDataListeners();
+          },
+          initStaticUI() {
+            this.initNavigation();
+            this.initProspecting();
+            this.initReviews();
+            this.initDeployment();
+            this.initCRM();
+            this.initSettings();
+          },
+          attachDataListeners() {
+              const collections = ['prospects', 'reviewInbox', 'deploymentQueue', 'liveSites'];
+              collections.forEach(col => {
+                  const unsubscribe = db.collection(col).onSnapshot(snapshot => {
+                      this.state[col] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                      this.updateAllUI();
+                      document.getElementById('loading-overlay').classList.add('hidden');
+                  }, error => {
+                      console.error("Error fetching collection: ", col, error);
+                      this.showToast('حدث خطأ في الاتصال بقاعدة البيانات.', 'error');
+                      document.getElementById('loading-overlay').classList.add('hidden');
+                  });
+                  this.listeners.push(unsubscribe);
+              });
+          },
+          detachListeners() {
+              this.listeners.forEach(unsubscribe => unsubscribe());
+              this.listeners = [];
+          },
+          updateAllUI() { this.updateUserPermissions(); this.updateDashboard(); this.renderProspectsTable(); this.renderReviews(); this.renderDeploymentList(); this.renderCrmSelect(); this.renderDatabaseTables(); this.updateReviewBadge(); },
+          updateUserPermissions() { const deploymentNavItem = document.getElementById('deployment-nav-item'); const isAbdulali = this.state.currentUser === 'عبد العالي'; deploymentNavItem.classList.toggle('hidden', isAbdulali); const activeTabButton = document.querySelector('#main-nav .nav-button.active'); if (isAbdulali && activeTabButton && activeTabButton.dataset.target === 'deployment') { this.showTab('dashboard'); } },
+          showTab(targetId) { const navButtons = document.querySelectorAll("#main-nav button"); const tabs = document.querySelectorAll(".tab-content"); navButtons.forEach((btn) => { const isTarget = btn.dataset.target === targetId; btn.classList.toggle("active", isTarget); btn.setAttribute('aria-selected', isTarget); }); tabs.forEach((tab) => tab.classList.toggle("active", tab.id === targetId)); localStorage.setItem('lastActiveTab_v9', targetId); },
+          initNavigation() { document.querySelectorAll("#main-nav button").forEach((button) => { button.addEventListener("click", () => this.showTab(button.dataset.target)); }); const lastTab = localStorage.getItem('lastActiveTab_v9') || 'dashboard'; if (lastTab === 'deployment' && this.state.currentUser === 'عبد العالي') { this.showTab('dashboard'); } else { this.showTab(lastTab); } },
+          updateDashboard() { document.getElementById("db-prospects-count").textContent = this.state.prospects.length; const pendingReviewCount = this.state.reviewInbox.filter(r => r.status === 'pending').length; document.getElementById("db-review-count").textContent = pendingReviewCount; document.getElementById("db-queue-count").textContent = this.state.deploymentQueue.length; document.getElementById("db-live-count").textContent = this.state.liveSites.length; this.renderPipelineChart(); this.renderLeadsChart(); },
+          updateReviewBadge() { const badge = document.getElementById('review-badge'); const count = this.state.reviewInbox.filter(r => r.reviewer === this.state.currentUser && r.status === 'pending').length; badge.textContent = count; badge.classList.toggle('hidden', count === 0); },
+          renderPipelineChart() { const ctx = document.getElementById("pipeline-chart").getContext("2d"); const data = [this.state.prospects.length, this.state.reviewInbox.filter(r => r.status === 'pending').length, this.state.deploymentQueue.length, this.state.liveSites.length]; const labels = ["فرص", "للمراجعة", "للنشر", "منشورة"]; const colors = ["#6366f1", "#f97316", "#f59e0b", "#22c55e"]; if (ctx.chart) ctx.chart.destroy(); ctx.chart = new Chart(ctx, { type: 'bar', data: { labels, datasets: [{ label: "عدد العلامات", data, backgroundColor: colors }] }, options: { responsive: true, maintainAspectRatio: false } }); },
+          renderLeadsChart() { const ctx = document.getElementById("leads-chart").getContext("2d"); const leadStatusCounts = {"تم الاتصال":0, "تم إرسال الكتالوج":0, "تم إرسال الفاتورة":0, "تم البيع":0, "مرفوض":0}; this.state.liveSites.forEach(site => site.leads?.forEach(lead => { if (leadStatusCounts.hasOwnProperty(lead.status)) leadStatusCounts[lead.status]++; })); if (ctx.chart) ctx.chart.destroy(); ctx.chart = new Chart(ctx, { type: 'doughnut', data: { labels: Object.keys(leadStatusCounts), datasets: [{ data: Object.values(leadStatusCounts), backgroundColor: ["#3b82f6", "#eab308", "#8b5cf6", "#16a34a", "#ef4444"] }] }, options: { responsive: true, maintainAspectRatio: false } }); },
+          
+          initProspecting() {
+            const criteriaContainer = document.getElementById("scorer-criteria-container");
+            if(criteriaContainer.childElementCount > 0) return; 
+            this.criteria.forEach(c => { const group = document.createElement("div"); group.className = "mb-4"; group.innerHTML = `<label class="block text-sm font-bold mb-2">${c.q}</label>`; const optionsContainer = document.createElement("div"); optionsContainer.className = "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2"; c.opts.forEach((opt, index) => { const optionId = `${c.name}-${index}`; optionsContainer.innerHTML += `<div class="flex-1 min-w-[150px]"><input type="radio" id="${optionId}" name="${c.name}" value="${opt.v}" ${index === 0 ? "checked" : ""} class="hidden scorer-radio"> <label for="${optionId}" class="radio-label text-sm"><span>${opt.t}</span><span class="radio-check text-green-500"><svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path></svg></span></label></div>`; }); group.appendChild(optionsContainer); criteriaContainer.appendChild(group); });
+            const calculateScore = () => { let score = 0; document.querySelectorAll('#scorer-criteria-container input[type="radio"]:checked').forEach(radio => score += parseInt(radio.value)); document.getElementById("scorer-score").textContent = score; const verdictEl = document.getElementById("scorer-verdict"); const addProspectForm = document.getElementById("add-prospect-form"); if (score >= 12) { verdictEl.innerHTML = '<p class="font-bold text-red-600">هدف ذو أولوية قصوى</p>'; addProspectForm.classList.remove("hidden"); } else if (score >= 8) { verdictEl.innerHTML = '<p class="font-bold text-yellow-600">هدف جيد للمراقبة</p>'; addProspectForm.classList.remove("hidden"); } else { verdictEl.innerHTML = '<p class="font-bold text-green-600">هدف منخفض الخطورة</p>'; addProspectForm.classList.add("hidden"); } };
+            criteriaContainer.addEventListener("change", calculateScore);
+            calculateScore();
+            document.getElementById("add-prospect-form").addEventListener("submit", async (e) => { e.preventDefault(); const name = document.getElementById("brand-name").value.trim(); if (this.state.prospects.some(p => p.name.toLowerCase() === name.toLowerCase())) { this.showToast('هذه العلامة موجودة بالفعل في قائمة الفرص.', 'error'); return; } const newBrand = { name, origin: document.getElementById("brand-origin").value, domain: document.getElementById('brand-domain').value.trim().toLowerCase(), score: parseInt(document.getElementById("scorer-score").textContent), dateAdded: firebase.firestore.FieldValue.serverTimestamp(), notes: document.getElementById("prospect-notes").value.trim() }; await db.collection("prospects").add(newBrand); this.showToast(`تمت إضافة "${newBrand.name}" بنجاح.`); e.target.reset(); calculateScore(); });
+            document.getElementById("prospects-table-body").addEventListener("click", (e) => { if (e.target.classList.contains("send-to-review-btn")) { const brandId = e.target.dataset.id; const brand = this.state.prospects.find(b => b.id === brandId); const reviewer = this.state.currentUser === 'إبراهيم' ? 'عبد العالي' : 'إبراهيم'; 
+            const scorerSelections = {}; this.criteria.forEach(c => { const checked = document.querySelector(`#scorer-criteria-container input[name="${c.name}"]:checked`); if(checked) scorerSelections[c.name] = checked.value; });
+            this.showConfirmation({ title: 'إرسال للمراجعة', body: `هل أنت متأكد من إرسال "${brand.name}" لمراجعة ${reviewer}؟`, confirmText: 'إرسال', onConfirm: async () => { const batch = db.batch(); batch.delete(db.collection("prospects").doc(brandId)); batch.set(db.collection("reviewInbox").doc(), { brandData: brand, proposer: this.state.currentUser, reviewer, status: 'pending', decisionDate: null, reason: null, scorerSelections, notes: brand.notes }); await batch.commit(); this.showToast(`تم إرسال "${brand.name}" للمراجعة.`); } }); } });
+          },
+          renderProspectsTable() { const tableBody = document.getElementById("prospects-table-body"); tableBody.innerHTML = ""; const emptyState = document.getElementById('prospects-empty-state'); emptyState.classList.toggle('hidden', this.state.prospects.length > 0); tableBody.parentElement.parentElement.classList.toggle('hidden', this.state.prospects.length === 0); this.state.prospects.forEach(brand => { const row = tableBody.insertRow(); row.className = "bg-white border-b"; row.innerHTML = `<td class="px-4 py-3 font-medium text-slate-900">${this.sanitizeHTML(brand.name)}</td><td class="px-4 py-3 font-bold">${brand.score}</td><td class="px-4 py-3 text-slate-500">${this.sanitizeHTML(brand.domain)}</td><td class="px-4 py-3 text-slate-500">${brand.dateAdded ? new Date(brand.dateAdded.seconds * 1000).toLocaleDateString('ar-SA') : ''}</td><td class="px-4 py-3"><button data-id="${brand.id}" class="send-to-review-btn bg-sky-500 hover:bg-sky-600 text-white text-xs font-bold py-1 px-3 rounded-md">إرسال للمراجعة</button></td>`; }); },
+          initReviews() { document.getElementById('reviews-container').addEventListener('click', e => { const reviewId = e.target.dataset.id; if (!reviewId) return; const reviewItem = this.state.reviewInbox.find(r => r.id === reviewId); if (e.target.classList.contains('approve-btn')) { this.showConfirmation({ title: 'موافقة على الترشيح', body: `هل توافق على ترشيح "${reviewItem.brandData.name}" ونقله إلى قائمة النشر؟`, confirmText: 'موافقة', onConfirm: async () => { const batch = db.batch(); batch.delete(db.collection("reviewInbox").doc(reviewId)); batch.set(db.collection("deploymentQueue").doc(reviewItem.brandData.id), reviewItem.brandData); await batch.commit(); this.showToast(`تمت الموافقة على "${reviewItem.brandData.name}".`); } }); } else if (e.target.classList.contains('reject-btn')) { this.showConfirmation({ title: 'رفض الترشيح', body: `لماذا ترفض ترشيح "${reviewItem.brandData.name}"؟`, confirmText: 'تأكيد الرفض', needsInput: true, inputLabel: 'سبب الرفض (مطلوب)', onConfirm: async (reason) => { await db.collection("reviewInbox").doc(reviewId).update({ status: 'rejected', reason, decisionDate: firebase.firestore.FieldValue.serverTimestamp() }); this.showToast(`تم رفض "${reviewItem.brandData.name}".`, 'error'); } }); } else if (e.target.classList.contains('view-details-btn')) { this.populateReviewDetailsModal(reviewItem); } }); document.getElementById('review-details-close-btn').onclick = () => { const modal = document.getElementById('review-details-modal'); modal.classList.remove('active'); setTimeout(() => modal.classList.add('hidden'), 300); }; document.getElementById('review-details-modal').onclick = (e) => { if (e.target.id === 'review-details-modal') { const modal = document.getElementById('review-details-modal'); modal.classList.remove('active'); setTimeout(() => modal.classList.add('hidden'), 300); } }; },
+          renderReviews() { const container = document.getElementById('reviews-container'); container.innerHTML = ''; const pendingReviews = this.state.reviewInbox.filter(r => r.reviewer === this.state.currentUser && r.status === 'pending'); document.getElementById('reviews-empty-state').classList.toggle('hidden', pendingReviews.length > 0); pendingReviews.forEach(item => { const card = document.createElement('div'); card.className = 'bg-white p-4 rounded-lg shadow-md border-l-4 border-orange-400'; card.innerHTML = ` <div class="flex justify-between items-start flex-wrap gap-2"> <div> <h4 class="font-bold text-lg">${this.sanitizeHTML(item.brandData.name)}</h4> <p class="text-sm text-slate-500">مرشح بواسطة: ${this.sanitizeHTML(item.proposer)}</p> <p class="text-sm text-slate-500">النتيجة: ${item.brandData.score}</p> </div> <div class="flex gap-2 items-center"> <button data-id="${item.id}" class="view-details-btn bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold py-1 px-4 rounded text-sm">عرض التفاصيل</button> <button data-id="${item.id}" class="approve-btn bg-green-500 hover:bg-green-600 text-white font-bold py-1 px-4 rounded">موافقة</button> <button data-id="${item.id}" class="reject-btn bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-4 rounded">رفض</button> </div> </div> `; container.appendChild(card); }); },
+          populateReviewDetailsModal(item) { const modal = document.getElementById('review-details-modal'); modal.classList.remove('hidden'); setTimeout(() => modal.classList.add('active'), 10); document.getElementById('review-details-title').textContent = `تفاصيل ترشيح: ${this.sanitizeHTML(item.brandData.name)}`; const notesEl = document.getElementById('details-notes'); const notes = item.notes || (item.brandData && item.brandData.notes) || ""; notesEl.textContent = notes || "لم يتم تقديم أي ملاحظات."; const scorerContainer = document.getElementById('details-scorer-container'); scorerContainer.innerHTML = ''; this.criteria.forEach(c => { const group = document.createElement("div"); group.className = "mb-4"; group.innerHTML = `<label class="block text-sm font-bold mb-2">${c.q}</label>`; const optionsContainer = document.createElement("div"); optionsContainer.className = "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2"; c.opts.forEach((opt, index) => { const optionId = `details-${c.name}-${index}`; const isChecked = item.scorerSelections && String(item.scorerSelections[c.name]) === String(opt.v); optionsContainer.innerHTML += `<div class="flex-1 min-w-[150px]"><input type="radio" id="${optionId}" name="details-${c.name}" value="${opt.v}" ${isChecked ? "checked" : ""} disabled class="hidden"> <label for="${optionId}" class="radio-label text-sm"><span>${opt.t}</span><span class="radio-check text-green-500"><svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path></svg></span></label></div>`; }); group.appendChild(optionsContainer); scorerContainer.appendChild(group); }); },
+          
+          initDeployment() {
+              const listContainer = document.getElementById("deployment-list-container");
+              const checklistContainer = document.getElementById("deployment-checklist-container");
+              const backBtn = document.getElementById('back-to-deployment-list-btn');
+              listContainer.addEventListener('click', (e) => { if (e.target.classList.contains('start-deployment-btn')) { const brandId = e.target.dataset.id; listContainer.classList.add('hidden'); checklistContainer.classList.remove('hidden'); this.renderChecklist(brandId); } });
+              backBtn.onclick = () => { checklistContainer.classList.add('hidden'); listContainer.classList.remove('hidden'); };
+              document.getElementById("complete-deployment-btn").onclick = () => { const brandId = document.getElementById("complete-deployment-btn").dataset.brandId; const brand = this.state.deploymentQueue.find(b => b.id === brandId); this.showConfirmation({ title: 'إكمال النشر', body: `هل أنت متأكد من إكمال نشر "${brand.name}" ونقلها إلى المواقع المنشورة؟`, confirmText: 'نعم، أكمل النشر', onConfirm: async () => { const batch = db.batch(); batch.delete(db.collection("deploymentQueue").doc(brandId)); batch.set(db.collection("liveSites").doc(brandId), {...brand, publishDate: firebase.firestore.FieldValue.serverTimestamp(), leads: [] }); await batch.commit(); checklistContainer.classList.add('hidden'); listContainer.classList.remove('hidden'); this.showToast(`تم نشر "${brand.name}" بنجاح!`); } }); };
+          },
+          renderDeploymentList() {
+            const listContainer = document.getElementById("deployment-list-container");
+            const placeholder = document.getElementById("deployment-placeholder");
+            listContainer.innerHTML = '';
+            const sortedQueue = [...this.state.deploymentQueue].sort((a, b) => b.score - a.score);
+            if (sortedQueue.length === 0) { placeholder.classList.remove('hidden'); listContainer.classList.add('hidden'); return; }
+            placeholder.classList.add('hidden'); listContainer.classList.remove('hidden');
+            sortedQueue.forEach(brand => { const card = document.createElement('div'); card.className = 'bg-white p-4 rounded-lg shadow-md border-l-4 border-yellow-400 flex justify-between items-center mb-3'; card.innerHTML = `<div><h4 class="font-bold text-lg">${this.sanitizeHTML(brand.name)}</h4><p class="text-sm text-slate-500">النتيجة: <span class="font-bold">${brand.score}</span></p></div><button data-id="${brand.id}" class="start-deployment-btn bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-5 rounded-lg">بدء النشر</button>`; listContainer.appendChild(card); });
+          },
+          async renderChecklist(brandId) {
+              const brandRef = db.collection('deploymentQueue').doc(brandId);
+              const brandDoc = await brandRef.get();
+              const brand = { id: brandDoc.id, ...brandDoc.data() };
+              if (!brand) return;
+              document.getElementById("checklist-brand-name").textContent = brand.name;
+              let angle = ""; if (brand.origin === "صينية") angle = '<strong>الخطة:</strong> سنكون "الشريك الاستراتيجي" في أمريكا.'; else if (brand.origin === "أمريكية" && !brand.hasWebsite) angle = '<strong>الخطة:</strong> سنكون "نحن أصحاب البراند" (الواجهة الرقمية الرسمية).'; else if (brand.origin === "أمريكية" && brand.hasWebsite && !brand.hasWholesalePage) angle = '<strong>الخطة:</strong> سنكون "الذراع الخاص بالبيع بالجملة".';
+              document.getElementById("deployment-info").innerHTML = `<p class="mb-2"><strong>أصل العلامة:</strong> ${this.sanitizeHTML(brand.origin)}</p><p>${angle}</p>`;
+              const checklistEl = document.getElementById("checklist");
+              checklistEl.innerHTML = "";
+              const checklistData = brand.checklist || this.deploymentChecklistItems.map(item => ({ text: item, completed: false }));
+              this.deploymentChecklistItems.forEach((item, index) => { const isCompleted = checklistData[index] ? checklistData[index].completed : false; checklistEl.innerHTML += `<div class="flex items-center p-2 rounded-md hover:bg-slate-100"><input id="check-${brand.id}-${index}" data-brand-id="${brand.id}" data-item-index="${index}" type="checkbox" class="checklist-item h-5 w-5 text-indigo-600 rounded" ${isCompleted ? "checked" : ""}><label for="check-${brand.id}-${index}" class="mr-3 text-slate-700">${item}</label></div>`; });
+              checklistEl.onchange = async (e) => { if (e.target.classList.contains("checklist-item")) { const itemIndex = parseInt(e.target.dataset.itemIndex); checklistData[itemIndex].completed = e.target.checked; await brandRef.update({ checklist: checklistData }); } };
+              this.updateChecklistProgress(brand);
+          },
+          updateChecklistProgress(brand) { const completedCount = brand.checklist ? brand.checklist.filter(item => item.completed).length : 0; const progress = (completedCount / this.deploymentChecklistItems.length) * 100; document.getElementById('deployment-progress-bar').style.width = `${progress}%`; const completeBtn = document.getElementById("complete-deployment-btn"); completeBtn.classList.toggle("hidden", progress < 100); completeBtn.dataset.brandId = brand.id; },
+          initCRM() { const select = document.getElementById("crm-select"); const container = document.getElementById("crm-container"); const addLeadForm = document.getElementById("add-lead-form"); const leadsListEl = document.getElementById("leads-list"); const renderLeads = (brand) => { leadsListEl.innerHTML = ""; const hasLeads = brand && brand.leads && brand.leads.length > 0; document.getElementById("leads-empty-state").classList.toggle('hidden', hasLeads); if (!hasLeads) return; brand.leads.forEach((lead, index) => { leadsListEl.innerHTML += ` <div class="p-3 bg-slate-100 rounded-md flex justify-between items-center gap-4"> <span class="font-medium flex-1">${this.sanitizeHTML(lead.name)}</span> <select data-brand-id="${brand.id}" data-lead-index="${index}" class="lead-status-select p-1 border rounded-md bg-white text-xs"> <option value="تم الاتصال" ${lead.status === "تم الاتصال" ? "selected" : ""}>تم الاتصال</option> <option value="تم إرسال الكتالوج" ${lead.status === "تم إرسال الكتالوج" ? "selected" : ""}>تم إرسال الكتالوج</option> <option value="تم إرسال الفاتورة" ${lead.status === "تم إرسال الفاتورة" ? "selected" : ""}>تم إرسال الفاتورة</option> <option value="تم البيع" ${lead.status === "تم البيع" ? "selected" : ""}>تم البيع</option> <option value="مرفوض" ${lead.status === "مرفوض" ? "selected" : ""}>مرفوض</option> </select> </div>`; }); }; select.onchange = () => { const brandId = select.value; container.classList.toggle("hidden", !brandId); if (brandId) { const brand = this.state.liveSites.find((b) => b.id == brandId); document.getElementById("crm-brand-name").textContent = brand.name; addLeadForm.dataset.brandId = brand.id; renderLeads(brand); } }; addLeadForm.onsubmit = (e) => { e.preventDefault(); const brand = this.state.liveSites.find((b) => b.id == addLeadForm.dataset.brandId); const leadNameInput = document.getElementById("lead-name"); const newLeadName = leadNameInput.value.trim(); if (!newLeadName) return; const currentLeads = brand.leads || []; const baseName = newLeadName.replace(/\s\(طلب جديد \d+\)$/i, '').trim(); const similarLeads = currentLeads.filter(l => l.name.replace(/\s\(طلب جديد \d+\)$/i, '').trim().toLowerCase() === baseName.toLowerCase() ); if (similarLeads.length > 0) { this.showConfirmation({ title: 'عميل مكرر', body: `العميل "${this.sanitizeHTML(baseName)}" موجود بالفعل. هل هذا طلب جديد؟`, confirmText: 'نعم، طلب جديد', onConfirm: async () => { const finalName = `${baseName} (طلب جديد ${similarLeads.length})`; const updatedLeads = [...currentLeads, { name: finalName, status: "تم الاتصال" }]; await db.collection('liveSites').doc(brand.id).update({ leads: updatedLeads }); this.showToast(`تمت إضافة "${this.sanitizeHTML(finalName)}".`); leadNameInput.value = ''; }, }); } else { const updatedLeads = [...currentLeads, { name: newLeadName, status: "تم الاتصال" }]; db.collection('liveSites').doc(brand.id).update({ leads: updatedLeads }); this.showToast(`تمت إضافة العميل "${this.sanitizeHTML(newLeadName)}".`); leadNameInput.value = ''; } }; leadsListEl.addEventListener("change", (e) => { if (e.target.classList.contains("lead-status-select")) { const brandId = e.target.dataset.brandId; const leadIndex = parseInt(e.target.dataset.leadIndex); const brand = this.state.liveSites.find((b) => b.id == brandId); const updatedLeads = [...brand.leads]; updatedLeads[leadIndex].status = e.target.value; db.collection('liveSites').doc(brandId).update({ leads: updatedLeads }); } }); },
+          renderCrmSelect() { const select = document.getElementById("crm-select"); const currentVal = select.value; select.innerHTML = '<option value="">-- اختر علامة تجارية --</option>'; this.state.liveSites.forEach(brand => select.innerHTML += `<option value="${brand.id}">${this.sanitizeHTML(brand.name)}</option>`); if (this.state.liveSites.some(b => b.id === currentVal)) { select.value = currentVal; } else { select.value = ''; document.getElementById('crm-container').classList.add('hidden'); } document.getElementById('crm-placeholder').classList.toggle("hidden", this.state.liveSites.length > 0); select.parentElement.classList.toggle("hidden", this.state.liveSites.length === 0); },
+          initDatabase() { },
+          renderDatabaseTables() { const reviewsBody = document.getElementById("db-reviews-table"); reviewsBody.innerHTML = ''; this.state.reviewInbox.forEach(item => { let statusClass = ''; if (item.status === 'approved') statusClass = 'text-green-600 bg-green-100'; else if (item.status === 'rejected') statusClass = 'text-red-600 bg-red-100'; else statusClass = 'text-orange-600 bg-orange-100'; const statusText = { pending: 'قيد المراجعة', approved: 'مقبول', rejected: 'مرفوض'}[item.status]; const row = reviewsBody.insertRow(); row.innerHTML = ` <td class="px-4 py-3 font-bold">${this.sanitizeHTML(item.brandData.name)}</td> <td class="px-4 py-3">${this.sanitizeHTML(item.proposer)}</td> <td class="px-4 py-3">${this.sanitizeHTML(item.reviewer)}</td> <td class="px-4 py-3"><span class="px-2 py-1 text-xs font-semibold rounded-full ${statusClass}">${statusText}</span></td> <td class="px-4 py-3 text-sm text-slate-600">${this.sanitizeHTML(item.reason || '—')}</td> `; }); const prospectsBody = document.getElementById("db-prospects-table"); prospectsBody.innerHTML = ''; this.state.prospects.concat(this.state.deploymentQueue).forEach(brand => { const statusText = this.state.deploymentQueue.some(b => b.id == brand.id) ? "قيد النشر" : "فرصة"; const statusColor = statusText === "قيد النشر" ? "text-yellow-600 bg-yellow-100" : "text-slate-600 bg-slate-100"; prospectsBody.innerHTML += `<tr class="bg-white border-b"><td class="px-4 py-3 font-bold text-slate-900">${this.sanitizeHTML(brand.name)}</td><td class="px-4 py-3">${brand.score}</td><td class="px-4 py-3">${this.sanitizeHTML(brand.domain)}</td><td class="px-4 py-3"><span class="px-2 py-1 text-xs font-semibold rounded-full ${statusColor}">${statusText}</span></td></tr>`; }); const liveBody = document.getElementById("db-live-table"); liveBody.innerHTML = ''; this.state.liveSites.forEach(brand => { liveBody.innerHTML += `<tr class="bg-white border-b"><td class="px-4 py-3 font-bold text-slate-900">${this.sanitizeHTML(brand.name)}</td><td class="px-4 py-3"><a href="http://${brand.domain}" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline">${this.sanitizeHTML(brand.domain)}</a></td><td class="px-4 py-3">${brand.publishDate ? new Date(brand.publishDate.seconds * 1000).toLocaleDateString('ar-SA') : ''}</td><td class="px-4 py-3 font-bold text-lg text-slate-900">${brand.leads ? brand.leads.length : 0}</td></tr>`; }); },
+          initExportButtons() { },
+          initSettings() { 
+            document.getElementById('logout-btn').onclick = () => { 
+              this.detachListeners();
+              localStorage.removeItem("brandOpsUser_v9"); 
+              window.location.reload(); 
+            }; 
+          }
+        };
+
+        app.init();
+      });
+    </script>
+  </body>
+</html>
