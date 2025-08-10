@@ -133,6 +133,11 @@
         transform: scale(0.95);
         opacity: 0;
         transition: all 0.2s ease-in-out;
+        max-width: 90%;
+        width: 500px;
+        max-height: 90vh;
+        overflow-y: auto;
+        word-wrap: break-word;
       }
       .overlay.active .modal-content {
         transform: scale(1);
@@ -269,7 +274,39 @@
           </div>
           <div id="crm" class="tab-content" role="tabpanel">
             <h2 class="text-3xl font-extrabold text-slate-900 mb-6">وحدة إدارة العملاء (CRM)</h2>
-            <div class="bg-white p-6 rounded-xl shadow-md"><div class="mb-6"><label for="crm-select" class="block text-sm font-bold mb-2">اختر علامة تجارية منشورة:</label><select id="crm-select" class="w-full md:w-1/2 p-2 border rounded-md"></select></div><div id="crm-container" class="hidden grid grid-cols-1 lg:grid-cols-2 gap-8"><div><h3 class="text-xl font-bold mb-4">إضافة عميل محتمل جديد</h3><form id="add-lead-form" class="space-y-4"><div><label for="lead-name" class="block text-sm font-bold">اسم العميل/الشركة</label><input type="text" id="lead-name" class="w-full p-2 border rounded-md" required /></div><button type="submit" class="w-full bg-sky-600 hover:bg-sky-700 text-white font-bold py-2 px-4 rounded-lg">إضافة عميل</button></form></div><div><h3 class="text-xl font-bold mb-4">قائمة العملاء لـ <span id="crm-brand-name" class="text-indigo-600"></span></h3><div id="leads-list" class="space-y-2"></div><div id="leads-empty-state" class="text-center py-6 text-slate-400 hidden"><p>لا يوجد عملاء بعد لهذه العلامة.</p></div></div></div><div id="crm-placeholder" class="text-center py-10 text-slate-500"><p>لا توجد مواقع منشورة بعد لإدارة عملائها.</p></div></div>
+            <div class="bg-white p-6 rounded-xl shadow-md">
+              <div class="mb-6">
+                <label for="crm-select" class="block text-sm font-bold mb-2">اختر علامة تجارية منشورة:</label>
+                <select id="crm-select" class="w-full md:w-1/2 p-2 border rounded-md">
+                  <option value="">-- جاري التحميل --</option>
+                </select>
+                <div id="crm-loading" class="mt-2 text-sm text-slate-500">جاري تحميل العلامات التجارية...</div>
+              </div>
+              <div id="crm-container" class="hidden grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div>
+                  <h3 class="text-xl font-bold mb-4">إضافة عميل محتمل جديد</h3>
+                  <form id="add-lead-form" class="space-y-4">
+                    <div>
+                      <label for="lead-name" class="block text-sm font-bold">اسم العميل/الشركة</label>
+                      <input type="text" id="lead-name" class="w-full p-2 border rounded-md" required />
+                    </div>
+                    <button type="submit" class="w-full bg-sky-600 hover:bg-sky-700 text-white font-bold py-2 px-4 rounded-lg">إضافة عميل</button>
+                  </form>
+                </div>
+                <div>
+                  <h3 class="text-xl font-bold mb-4">قائمة العملاء لـ <span id="crm-brand-name" class="text-indigo-600"></span></h3>
+                  <div id="leads-list" class="space-y-2"></div>
+                  <div id="leads-empty-state" class="text-center py-6 text-slate-400 hidden">
+                    <p>لا يوجد عملاء بعد لهذه العلامة.</p>
+                    <button class="mt-2 text-sky-600 hover:text-sky-800 font-medium" onclick="document.getElementById('lead-name').focus()">أضف عميل جديد</button>
+                  </div>
+                </div>
+              </div>
+              <div id="crm-placeholder" class="text-center py-10 text-slate-500">
+                <p>لا توجد مواقع منشورة بعد لإدارة عملائها.</p>
+                <p class="text-sm mt-2">تأكد من نشر بعض العلامات التجارية أولاً من وحدة النشر والعمليات.</p>
+              </div>
+            </div>
           </div>
           <div id="database" class="tab-content" role="tabpanel">
             <h2 class="text-3xl font-extrabold text-slate-900 mb-6">قواعد البيانات</h2>
@@ -317,14 +354,54 @@
           sanitizeHTML(str) { if (!str) return ''; const temp = document.createElement('div'); temp.textContent = str; return temp.innerHTML; },
           
           // --- App Initialization ---
-          init() { const savedUser = localStorage.getItem("brandOpsUser_v9"); savedUser ? (this.state.currentUser = savedUser, this.initializeApp()) : (document.getElementById('login-modal').classList.remove('hidden'), this.initLoginScreen()) },
-          initLoginScreen() { document.querySelectorAll('.login-btn').forEach(button => { button.addEventListener('click', (e) => { this.state.currentUser = e.target.dataset.user; localStorage.setItem("brandOpsUser_v9", this.state.currentUser); document.getElementById('login-modal').classList.add('hidden'); this.initializeApp(); }); }); },
+          init() { 
+            // التحقق من وجود المستخدم في التخزين المحلي
+            const savedUser = localStorage.getItem("brandOpsUser_v9");
+            
+            if (savedUser) {
+              // إذا كان هناك مستخدم محفوظ، قم بتعيينه كالمستخدم الحالي
+              this.state.currentUser = savedUser;
+              
+              // إخفاء نافذة تسجيل الدخول فوراً
+              const loginModal = document.getElementById('login-modal');
+              loginModal.classList.add('hidden');
+              
+              // تهيئة التطبيق
+              this.initializeApp();
+            } else {
+              // إذا لم يكن هناك مستخدم محفوظ، أظهر نافذة تسجيل الدخول
+              document.getElementById('login-modal').classList.remove('hidden');
+              this.initLoginScreen();
+            }
+          },
+          initLoginScreen() { document.querySelectorAll('.login-btn').forEach(button => { button.addEventListener('click', (e) => { this.state.currentUser = e.target.dataset.user; localStorage.setItem("brandOpsUser_v9", this.state.currentUser); 
+                  // إخفاء نافذة تسجيل الدخول أولاً
+                  const loginModal = document.getElementById('login-modal');
+                  loginModal.classList.remove('active');
+                  
+                  // الانتظار قليلاً ثم إخفاء النافذة بالكامل وتهيئة التطبيق
+                  setTimeout(() => {
+                    loginModal.classList.add('hidden');
+                    this.initializeApp();
+                  }, 300);
+                }); }); },
           initializeApp() {
             document.getElementById('loading-overlay').classList.remove('hidden');
             document.getElementById('app-container').classList.remove('hidden');
             document.getElementById('current-user-name').textContent = this.state.currentUser;
             this.initStaticUI();
             this.attachDataListeners();
+            
+            // استعادة آخر تبويب كان مفتوحًا بعد تحميل البيانات
+            setTimeout(() => {
+              const lastTab = localStorage.getItem('lastActiveTab_v9') || 'dashboard';
+              // التأكد من أن المستخدم لديه الصلاحية لعرض هذا التبويب
+              if (lastTab === 'deployment' && this.state.currentUser === 'عبد العالي') {
+                this.showTab('dashboard');
+              } else {
+                this.showTab(lastTab);
+              }
+            }, 500);
           },
           initStaticUI() {
             this.initNavigation();
@@ -408,12 +485,181 @@
               checklistEl.innerHTML = "";
               const checklistData = brand.checklist || this.deploymentChecklistItems.map(item => ({ text: item, completed: false }));
               this.deploymentChecklistItems.forEach((item, index) => { const isCompleted = checklistData[index] ? checklistData[index].completed : false; checklistEl.innerHTML += `<div class="flex items-center p-2 rounded-md hover:bg-slate-100"><input id="check-${brand.id}-${index}" data-brand-id="${brand.id}" data-item-index="${index}" type="checkbox" class="checklist-item h-5 w-5 text-indigo-600 rounded" ${isCompleted ? "checked" : ""}><label for="check-${brand.id}-${index}" class="mr-3 text-slate-700">${item}</label></div>`; });
-              checklistEl.onchange = async (e) => { if (e.target.classList.contains("checklist-item")) { const itemIndex = parseInt(e.target.dataset.itemIndex); checklistData[itemIndex].completed = e.target.checked; await brandRef.update({ checklist: checklistData }); } };
+              checklistEl.onchange = async (e) => { if (e.target.classList.contains("checklist-item")) { const itemIndex = parseInt(e.target.dataset.itemIndex); checklistData[itemIndex].completed = e.target.checked; await brandRef.update({ checklist: checklistData }); 
+                  // تحديث شريط التقدم وزر الإكمال فورًا بعد تحديث البيانات
+                  const updatedBrand = { ...brand, checklist: checklistData };
+                  this.updateChecklistProgress(updatedBrand);
+                } };
               this.updateChecklistProgress(brand);
           },
           updateChecklistProgress(brand) { const completedCount = brand.checklist ? brand.checklist.filter(item => item.completed).length : 0; const progress = (completedCount / this.deploymentChecklistItems.length) * 100; document.getElementById('deployment-progress-bar').style.width = `${progress}%`; const completeBtn = document.getElementById("complete-deployment-btn"); completeBtn.classList.toggle("hidden", progress < 100); completeBtn.dataset.brandId = brand.id; },
-          initCRM() { const select = document.getElementById("crm-select"); const container = document.getElementById("crm-container"); const addLeadForm = document.getElementById("add-lead-form"); const leadsListEl = document.getElementById("leads-list"); const renderLeads = (brand) => { leadsListEl.innerHTML = ""; const hasLeads = brand && brand.leads && brand.leads.length > 0; document.getElementById("leads-empty-state").classList.toggle('hidden', hasLeads); if (!hasLeads) return; brand.leads.forEach((lead, index) => { leadsListEl.innerHTML += ` <div class="p-3 bg-slate-100 rounded-md flex justify-between items-center gap-4"> <span class="font-medium flex-1">${this.sanitizeHTML(lead.name)}</span> <select data-brand-id="${brand.id}" data-lead-index="${index}" class="lead-status-select p-1 border rounded-md bg-white text-xs"> <option value="تم الاتصال" ${lead.status === "تم الاتصال" ? "selected" : ""}>تم الاتصال</option> <option value="تم إرسال الكتالوج" ${lead.status === "تم إرسال الكتالوج" ? "selected" : ""}>تم إرسال الكتالوج</option> <option value="تم إرسال الفاتورة" ${lead.status === "تم إرسال الفاتورة" ? "selected" : ""}>تم إرسال الفاتورة</option> <option value="تم البيع" ${lead.status === "تم البيع" ? "selected" : ""}>تم البيع</option> <option value="مرفوض" ${lead.status === "مرفوض" ? "selected" : ""}>مرفوض</option> </select> </div>`; }); }; select.onchange = () => { const brandId = select.value; container.classList.toggle("hidden", !brandId); if (brandId) { const brand = this.state.liveSites.find((b) => b.id == brandId); document.getElementById("crm-brand-name").textContent = brand.name; addLeadForm.dataset.brandId = brand.id; renderLeads(brand); } }; addLeadForm.onsubmit = (e) => { e.preventDefault(); const brand = this.state.liveSites.find((b) => b.id == addLeadForm.dataset.brandId); const leadNameInput = document.getElementById("lead-name"); const newLeadName = leadNameInput.value.trim(); if (!newLeadName) return; const currentLeads = brand.leads || []; const baseName = newLeadName.replace(/\s\(طلب جديد \d+\)$/i, '').trim(); const similarLeads = currentLeads.filter(l => l.name.replace(/\s\(طلب جديد \d+\)$/i, '').trim().toLowerCase() === baseName.toLowerCase() ); if (similarLeads.length > 0) { this.showConfirmation({ title: 'عميل مكرر', body: `العميل "${this.sanitizeHTML(baseName)}" موجود بالفعل. هل هذا طلب جديد؟`, confirmText: 'نعم، طلب جديد', onConfirm: async () => { const finalName = `${baseName} (طلب جديد ${similarLeads.length})`; const updatedLeads = [...currentLeads, { name: finalName, status: "تم الاتصال" }]; await db.collection('liveSites').doc(brand.id).update({ leads: updatedLeads }); this.showToast(`تمت إضافة "${this.sanitizeHTML(finalName)}".`); leadNameInput.value = ''; }, }); } else { const updatedLeads = [...currentLeads, { name: newLeadName, status: "تم الاتصال" }]; db.collection('liveSites').doc(brand.id).update({ leads: updatedLeads }); this.showToast(`تمت إضافة العميل "${this.sanitizeHTML(newLeadName)}".`); leadNameInput.value = ''; } }; leadsListEl.addEventListener("change", (e) => { if (e.target.classList.contains("lead-status-select")) { const brandId = e.target.dataset.brandId; const leadIndex = parseInt(e.target.dataset.leadIndex); const brand = this.state.liveSites.find((b) => b.id == brandId); const updatedLeads = [...brand.leads]; updatedLeads[leadIndex].status = e.target.value; db.collection('liveSites').doc(brandId).update({ leads: updatedLeads }); } }); },
-          renderCrmSelect() { const select = document.getElementById("crm-select"); const currentVal = select.value; select.innerHTML = '<option value="">-- اختر علامة تجارية --</option>'; this.state.liveSites.forEach(brand => select.innerHTML += `<option value="${brand.id}">${this.sanitizeHTML(brand.name)}</option>`); if (this.state.liveSites.some(b => b.id === currentVal)) { select.value = currentVal; } else { select.value = ''; document.getElementById('crm-container').classList.add('hidden'); } document.getElementById('crm-placeholder').classList.toggle("hidden", this.state.liveSites.length > 0); select.parentElement.classList.toggle("hidden", this.state.liveSites.length === 0); },
+          initCRM() {
+            const select = document.getElementById("crm-select");
+            const container = document.getElementById("crm-container");
+            const addLeadForm = document.getElementById("add-lead-form");
+            const leadsListEl = document.getElementById("leads-list");
+            
+            // دالة عرض العملاء
+            const renderLeads = (brand) => {
+              leadsListEl.innerHTML = "";
+              
+              // التحقق من وجود العلامة التجارية والعملاء
+              if (!brand) {
+                console.error("العلامة التجارية غير موجودة");
+                return;
+              }
+              
+              const hasLeads = brand.leads && Array.isArray(brand.leads) && brand.leads.length > 0;
+              document.getElementById("leads-empty-state").classList.toggle('hidden', hasLeads);
+              
+              if (!hasLeads) return;
+              
+              // عرض كل عميل في القائمة
+              brand.leads.forEach((lead, index) => {
+                // التحقق من وجود الحالة
+                const leadStatus = lead.status || "تم الاتصال";
+                
+                leadsListEl.innerHTML += `
+                  <div class="p-3 bg-slate-100 rounded-md flex justify-between items-center gap-4">
+                    <span class="font-medium flex-1">${this.sanitizeHTML(lead.name)}</span>
+                    <select data-brand-id="${brand.id}" data-lead-index="${index}" class="lead-status-select p-1 border rounded-md bg-white text-xs">
+                      <option value="تم الاتصال" ${leadStatus === "تم الاتصال" ? "selected" : ""}>تم الاتصال</option>
+                      <option value="تم إرسال الكتالوج" ${leadStatus === "تم إرسال الكتالوج" ? "selected" : ""}>تم إرسال الكتالوج</option>
+                      <option value="تم إرسال الفاتورة" ${leadStatus === "تم إرسال الفاتورة" ? "selected" : ""}>تم إرسال الفاتورة</option>
+                      <option value="تم البيع" ${leadStatus === "تم البيع" ? "selected" : ""}>تم البيع</option>
+                      <option value="مرفوض" ${leadStatus === "مرفوض" ? "selected" : ""}>مرفوض</option>
+                    </select>
+                  </div>
+                `;
+              });
+            };
+            
+            // عند تغيير العلامة التجارية المحددة
+            select.onchange = () => {
+              const brandId = select.value;
+              container.classList.toggle("hidden", !brandId);
+              
+              if (brandId) {
+                const brand = this.state.liveSites.find((b) => b.id == brandId);
+                
+                if (!brand) {
+                  console.error("لم يتم العثور على العلامة التجارية بالمعرف:", brandId);
+                  this.showToast("حدث خطأ في تحميل بيانات العلامة التجارية", "error");
+                  return;
+                }
+                
+                // التأكد من وجود مصفوفة العملاء
+                if (!brand.leads) {
+                  brand.leads = [];
+                }
+                
+                document.getElementById("crm-brand-name").textContent = brand.name;
+                addLeadForm.dataset.brandId = brand.id;
+                renderLeads(brand);
+              }
+            };
+            
+            // عند إضافة عميل جديد
+            addLeadForm.onsubmit = (e) => {
+              e.preventDefault();
+              const brand = this.state.liveSites.find((b) => b.id == addLeadForm.dataset.brandId);
+              
+              if (!brand) {
+                this.showToast("حدث خطأ في تحميل بيانات العلامة التجارية", "error");
+                return;
+              }
+              
+              const leadNameInput = document.getElementById("lead-name");
+              const newLeadName = leadNameInput.value.trim();
+              
+              if (!newLeadName) return;
+              
+              // التأكد من وجود مصفوفة العملاء
+              if (!brand.leads) {
+                brand.leads = [];
+              }
+              
+              const currentLeads = brand.leads || [];
+              const baseName = newLeadName.replace(/\s\(طلب جديد \d+\)$/i, '').trim();
+              const similarLeads = currentLeads.filter(l => l.name.replace(/\s\(طلب جديد \d+\)$/i, '').trim().toLowerCase() === baseName.toLowerCase() );
+              
+              if (similarLeads.length > 0) {
+                this.showConfirmation({
+                  title: 'عميل مكرر',
+                  body: `العميل "${this.sanitizeHTML(baseName)}" موجود بالفعل. هل هذا طلب جديد؟`,
+                  confirmText: 'نعم، طلب جديد',
+                  onConfirm: async () => {
+                    const finalName = `${baseName} (طلب جديد ${similarLeads.length})`;
+                    const updatedLeads = [...currentLeads, { name: finalName, status: "تم الاتصال" }];
+                    await db.collection('liveSites').doc(brand.id).update({ leads: updatedLeads });
+                    this.showToast(`تمت إضافة "${this.sanitizeHTML(finalName)}".`);
+                    leadNameInput.value = '';
+                  },
+                });
+              } else {
+                const updatedLeads = [...currentLeads, { name: newLeadName, status: "تم الاتصال" }];
+                await db.collection('liveSites').doc(brand.id).update({ leads: updatedLeads });
+                this.showToast(`تمت إضافة العميل "${this.sanitizeHTML(newLeadName)}".`);
+                leadNameInput.value = '';
+              }
+            };
+            
+            // عند تغيير حالة العميل
+            leadsListEl.addEventListener("change", (e) => {
+              if (e.target.classList.contains("lead-status-select")) {
+                const brandId = e.target.dataset.brandId;
+                const leadIndex = parseInt(e.target.dataset.leadIndex);
+                const brand = this.state.liveSites.find((b) => b.id == brandId);
+                
+                if (!brand || !brand.leads || !brand.leads[leadIndex]) {
+                  console.error("بيانات العميل غير صالحة");
+                  return;
+                }
+                
+                const updatedLeads = [...brand.leads];
+                updatedLeads[leadIndex].status = e.target.value;
+                
+                db.collection('liveSites').doc(brandId).update({ leads: updatedLeads })
+                  .catch(error => {
+                    console.error("خطأ في تحديث حالة العميل:", error);
+                    this.showToast("حدث خطأ أثناء تحديث حالة العميل", "error");
+                  });
+              }
+            });
+          },
+          renderCrmSelect() { const select = document.getElementById("crm-select"); const loadingEl = document.getElementById("crm-loading"); const currentVal = select.value; select.innerHTML = '<option value="">-- اختر علامة تجارية --</option>'; 
+              
+              // إخفاء رسالة التحميل
+              loadingEl.classList.add("hidden");
+              
+              if (this.state.liveSites.length === 0) {
+                select.innerHTML = '<option value="">-- لا توجد علامات تجارية --</option>';
+                document.getElementById('crm-container').classList.add('hidden');
+                document.getElementById('crm-placeholder').classList.remove("hidden");
+                select.parentElement.classList.remove("hidden");
+                return;
+              }
+              
+              // عرض العلامات التجارية في القائمة
+              this.state.liveSites.forEach(brand => {
+                select.innerHTML += `<option value="${brand.id}">${this.sanitizeHTML(brand.name)}</option>`;
+              });
+              
+              // الحفاظ على القيمة المحددة سابقًا إن وجدت
+              if (this.state.liveSites.some(b => b.id === currentVal)) {
+                select.value = currentVal;
+              } else {
+                select.value = '';
+                document.getElementById('crm-container').classList.add('hidden');
+              }
+              
+              // إظهار/إخفاء العناصر المناسبة
+              document.getElementById('crm-placeholder').classList.add("hidden");
+              select.parentElement.classList.remove("hidden");
+              
+              // تسجيل عدد العلامات التجارية المحملة للتأكد من أن البيانات تصل بشكل صحيح
+              console.log(`تم تحميل ${this.state.liveSites.length} علامة تجارية في وحدة CRM`);
+            },
           initDatabase() { },
           renderDatabaseTables() { const reviewsBody = document.getElementById("db-reviews-table"); reviewsBody.innerHTML = ''; this.state.reviewInbox.forEach(item => { let statusClass = ''; if (item.status === 'approved') statusClass = 'text-green-600 bg-green-100'; else if (item.status === 'rejected') statusClass = 'text-red-600 bg-red-100'; else statusClass = 'text-orange-600 bg-orange-100'; const statusText = { pending: 'قيد المراجعة', approved: 'مقبول', rejected: 'مرفوض'}[item.status]; const row = reviewsBody.insertRow(); row.innerHTML = ` <td class="px-4 py-3 font-bold">${this.sanitizeHTML(item.brandData.name)}</td> <td class="px-4 py-3">${this.sanitizeHTML(item.proposer)}</td> <td class="px-4 py-3">${this.sanitizeHTML(item.reviewer)}</td> <td class="px-4 py-3"><span class="px-2 py-1 text-xs font-semibold rounded-full ${statusClass}">${statusText}</span></td> <td class="px-4 py-3 text-sm text-slate-600">${this.sanitizeHTML(item.reason || '—')}</td> `; }); const prospectsBody = document.getElementById("db-prospects-table"); prospectsBody.innerHTML = ''; this.state.prospects.concat(this.state.deploymentQueue).forEach(brand => { const statusText = this.state.deploymentQueue.some(b => b.id == brand.id) ? "قيد النشر" : "فرصة"; const statusColor = statusText === "قيد النشر" ? "text-yellow-600 bg-yellow-100" : "text-slate-600 bg-slate-100"; prospectsBody.innerHTML += `<tr class="bg-white border-b"><td class="px-4 py-3 font-bold text-slate-900">${this.sanitizeHTML(brand.name)}</td><td class="px-4 py-3">${brand.score}</td><td class="px-4 py-3">${this.sanitizeHTML(brand.domain)}</td><td class="px-4 py-3"><span class="px-2 py-1 text-xs font-semibold rounded-full ${statusColor}">${statusText}</span></td></tr>`; }); const liveBody = document.getElementById("db-live-table"); liveBody.innerHTML = ''; this.state.liveSites.forEach(brand => { liveBody.innerHTML += `<tr class="bg-white border-b"><td class="px-4 py-3 font-bold text-slate-900">${this.sanitizeHTML(brand.name)}</td><td class="px-4 py-3"><a href="http://${brand.domain}" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline">${this.sanitizeHTML(brand.domain)}</a></td><td class="px-4 py-3">${brand.publishDate ? new Date(brand.publishDate.seconds * 1000).toLocaleDateString('ar-SA') : ''}</td><td class="px-4 py-3 font-bold text-lg text-slate-900">${brand.leads ? brand.leads.length : 0}</td></tr>`; }); },
           initExportButtons() { },
